@@ -1,8 +1,9 @@
 import logging
 
-from requests import RequestException
+from bs4 import BeautifulSoup
 
-from exceptions import ParserFindTagException
+from requests import RequestException
+from exceptions import ParserFindTagException, PageNotLoadException
 
 
 def get_response(session, url):
@@ -16,6 +17,17 @@ def get_response(session, url):
             f'Возникла ошибка при загрузке страницы {url}',
             stack_info=True
         )
+
+
+def get_soup(session, url, feature):
+    try:
+        response = get_response(session, url)
+    except PageNotLoadException:
+        logging.exception(
+            f'Основная страница {url} не загрузилась',
+            stack_info=True
+        )
+    return BeautifulSoup(response.text, features=feature)
 
 
 def find_tag(soup, tag, attrs=None):

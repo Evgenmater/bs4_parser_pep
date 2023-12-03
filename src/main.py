@@ -8,10 +8,12 @@ from tqdm import tqdm
 
 from configs import configure_argument_parser, configure_logging
 from constants import (
-    BASE_DIR, MAIN_DOC_URL, PEP_DOC_URL, EXPECTED_STATUS, QUANTITY_STATUS
+    BASE_DIR, MAIN_DOC_URL, PEP_DOC_URL, FEATURES,
+    EXPECTED_STATUS, QUANTITY_STATUS, PATTERN
 )
+from exceptions import ListNotFoundException
 from outputs import control_output
-from utils import get_response, find_tag
+from utils import get_response, find_tag, get_soup
 
 
 def whats_new(session):
@@ -20,12 +22,7 @@ def whats_new(session):
     И информации об авторах и редакторах статей.
     """
     whats_new_url = urljoin(MAIN_DOC_URL, 'whatsnew/')
-    response = get_response(session, whats_new_url)
-
-    if response is None:
-        return
-
-    soup = BeautifulSoup(response.text, features='lxml')
+    soup = get_soup(session, whats_new_url, FEATURES)
     main_div = find_tag(soup, 'section', attrs={'id': 'what-s-new-in-python'})
     div_with_ul = find_tag(main_div, 'div', attrs={'class': 'toctree-wrapper'})
     sections_by_python = div_with_ul.find_all(
@@ -51,12 +48,7 @@ def whats_new(session):
 
 def latest_versions(session):
     """Парсер данных актуальных версий Python."""
-    response = get_response(session, MAIN_DOC_URL)
-
-    if response is None:
-        return
-
-    soup = BeautifulSoup(response.text, 'lxml')
+    soup = get_soup(session, MAIN_DOC_URL, FEATURES)
     sidebar = find_tag(soup, 'div', {'class': 'sphinxsidebarwrapper'})
     ul_tags = sidebar.find_all('ul')
 
@@ -65,10 +57,10 @@ def latest_versions(session):
             a_tags = ul.find_all('a')
             break
     else:
-        raise Exception('Ничего не нашлось')
+        raise ListNotFoundException('Ничего не нашлось')
 
     results = [('Ссылка на документацию', 'Версия', 'Статус')]
-    pattern = r'Python (?P<version>\d\.\d+) \((?P<status>.*)\)'
+    pattern = PATTERN
 
     for a_tag in a_tags:
         text_match = re.search(pattern, a_tag.text)
@@ -86,12 +78,7 @@ def latest_versions(session):
 def download(session):
     """Парсер, который скачивает архив с документацией Python."""
     downloads_url = urljoin(MAIN_DOC_URL, 'download.html')
-    response = get_response(session, downloads_url)
-
-    if response is None:
-        return
-
-    soup = BeautifulSoup(response.text, 'lxml')
+    soup = get_soup(session, downloads_url, FEATURES)
     main_tag = find_tag(soup, 'div', {'role': 'main'})
     table_tag = find_tag(main_tag, 'table', {'class': 'docutils'})
     pdf_a4_tag = find_tag(
@@ -102,7 +89,7 @@ def download(session):
     downloads_dir = BASE_DIR / 'downloads'
     downloads_dir.mkdir(exist_ok=True)
     archive_path = downloads_dir / filename
-    response = session.get(archive_url)
+    response = get_response(session, archive_url)
 
     with open(archive_path, 'wb') as file:
         file.write(response.content)
@@ -112,12 +99,7 @@ def download(session):
 
 def pep(session):
     """Парсинг документов PEP."""
-    response = get_response(session, PEP_DOC_URL)
-
-    if response is None:
-        return
-
-    soup = BeautifulSoup(response.text, features='xml')
+    soup = get_soup(session, PEP_DOC_URL, FEATURES)
     pep_number = soup.select('tbody > tr > td > a')
     pep_status = soup.select('tbody > tr > td > abbr')
     status_count = 0
@@ -135,13 +117,12 @@ def pep(session):
 
         index_status = pep_status[status_count].text[1:]
         this_status = EXPECTED_STATUS[index_status]
-        version_pep = urljoin(
-            PEP_DOC_URL, i['href']
-        )
+        version_pep = urljoin(PEP_DOC_URL, i['href'])
         response = get_response(session, version_pep)
 
         if response is None:
             continue
+
         soup = BeautifulSoup(response.text, features='lxml')
         abbr = soup.find('abbr')
         status_count += 1
