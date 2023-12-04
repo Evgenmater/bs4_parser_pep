@@ -117,14 +117,14 @@ def pep(session):
             continue
 
         index_status = pep_status[status_count].text[1:]
-        
+
         this_status = EXPECTED_STATUS[index_status]
         version_pep = urljoin(PEP_DOC_URL, i['href'])
         response = get_response(session, version_pep)
-        
+
         if response is None:
             continue
-        
+
         soup = BeautifulSoup(response.text, features=FEATURES)
         abbr = find_tag(soup, 'abbr')
         status_count += 1
