@@ -37,7 +37,7 @@ def whats_new(session):
         if response is None:
             continue
 
-        soup = BeautifulSoup(response.text, features='lxml')
+        soup = BeautifulSoup(response.text, features=FEATURES)
         h1 = find_tag(soup, 'h1')
         dl = find_tag(soup, 'dl')
         dl_text = dl.text.replace('\n', ' ')
@@ -100,8 +100,9 @@ def download(session):
 def pep(session):
     """Парсинг документов PEP."""
     soup = get_soup(session, PEP_DOC_URL, FEATURES)
-    pep_number = soup.select('tbody > tr > td > a')
-    pep_status = soup.select('tbody > tr > td > abbr')
+    main_div = find_tag(soup, 'section', attrs={'id': 'numerical-index'})
+    pep_number = main_div.find_all('a', {'class': 'pep reference internal'})
+    pep_status = main_div.find_all('abbr')
     status_count = 0
     set_pep = set()
     results = [('Статус', 'Количество')]
@@ -116,19 +117,22 @@ def pep(session):
             continue
 
         index_status = pep_status[status_count].text[1:]
+        
         this_status = EXPECTED_STATUS[index_status]
         version_pep = urljoin(PEP_DOC_URL, i['href'])
         response = get_response(session, version_pep)
-
+        
         if response is None:
             continue
-
-        soup = BeautifulSoup(response.text, features='lxml')
-        abbr = soup.find('abbr')
+        
+        soup = BeautifulSoup(response.text, features=FEATURES)
+        abbr = find_tag(soup, 'abbr')
         status_count += 1
-
         if abbr.text in this_status:
-            QUANTITY_STATUS[abbr.text] += 1
+            if abbr.text in QUANTITY_STATUS:
+                QUANTITY_STATUS[abbr.text] += 1
+            else:
+                QUANTITY_STATUS[abbr.text] = 1
             QUANTITY_STATUS['Total'] += 1
         else:
             not_status = (
@@ -138,7 +142,6 @@ def pep(session):
                 f'Ожидаемые статусы: {EXPECTED_STATUS[index_status]}\n'
             )
             logging.info(not_status)
-
     for key, value in QUANTITY_STATUS.items():
         results.append((key, value))
     return results
